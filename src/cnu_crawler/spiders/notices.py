@@ -1,13 +1,13 @@
 # src/cnu_crawler/spiders/notices.py
 import asyncio
 import json
-import re  # HTML에서 ID 추출 시 필요할 수 있음
+import re
 from datetime import datetime
 from typing import Dict, List, Optional
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse, urlunparse  # urlparse, urlunparse 추가
 
 from loguru import logger
-from aiohttp import ClientError  # aiohttp 관련 예외 처리
+from aiohttp import ClientError
 
 from cnu_crawler.core.fetcher import fetch_json, fetch_text
 from cnu_crawler.core.parser import html_select
@@ -24,24 +24,38 @@ BOARD_CODES = {
 }
 
 
+def college_code_from_url(college_url: str) -> Optional[str]:
+    try:
+        hostname = college_url.split('/')[2]
+        return hostname.split('.')[0]
+    except IndexError:
+        logger.warning(f"URL에서 대학 코드를 추출할 수 없습니다: {college_url}")
+        return None
+
+
 def get_notice_list_url(dept: Department, board_key: str, page: int) -> str:
-    department_base_url = dept.url.rstrip("/")
+    # dept.url에서 # 이후 부분을 제거하여 실제 base URL을 만듭니다.
+    parsed_dept_url = urlparse(dept.url.rstrip("/"))
+    # scheme, netloc, path만 사용하고 query, fragment는 제거
+    # path가 비어있으면 '/'로 설정 (예: https://example.com#frag -> https://example.com/)
+    path_for_dept_base = parsed_dept_url.path if parsed_dept_url.path else '/'
+    department_base_url = urlunparse((parsed_dept_url.scheme, parsed_dept_url.netloc, path_for_dept_base, '', '', ''))
+    department_base_url = department_base_url.rstrip('/')  # 다시 한번 우측 / 제거
+
+    logger.trace(f"[{dept.name}] 원본 dept.url: {dept.url}, # 제거 후 base URL: {department_base_url}")
 
     # --- !! 중요 !! ---
     # 각 학과별 실제 공지사항 URL 구조에 맞게 이 부분을 상세히 수정해야 합니다.
-    # dept.name 또는 dept.code를 사용하여 분기하는 예시입니다.
-    # 실제 학과 코드나 이름, URL 패턴을 확인하여 적용하세요.
-
-    # 예시: 공과대학 대학원 ('eng'는 College 코드, 'archi'는 Department 코드일 수 있음)
-    # 로그에서 'eng.cnu.ac.kr/eng/department/aerospace.do' 와 같은 URL이 dept.url로 사용됨
-    if college_code_from_url(dept.url) == "eng" and board_key == "grad":
-        # FIXME: 공과대학 대학원의 실제 공지사항 목록 URL 템플릿으로 수정
-        # 예: "https://eng.cnu.ac.kr/eng/notice/grad.do?page={}"
-        # 아래는 기존 방식을 따르되, 문제가 있다면 이 부분을 수정해야 함을 명시
-        pass  # 특별한 규칙이 없다면 아래 기본 규칙으로
-    elif college_code_from_url(dept.url) == "art" and board_key == "undergrad":
-        # FIXME: 예술대학 학부의 실제 공지사항 목록 URL 템플릿으로 수정
-        pass
+    # current_college_code = college_code_from_url(dept.url) # dept.url 대신 department_base_url 사용 고려
+    # if current_college_code == "nursing" and "menu" in dept.url: # 간호대학 URL 특성 반영 예시
+    #     # FIXME: 간호대학의 실제 공지사항 목록 URL로 수정 (예: `#` 이전 URL + 실제 경로)
+    #     # 예: "https://nursing.cnu.ac.kr/nursing/board/undergrad_notice.do"
+    #     # department_base_url = "https://nursing.cnu.ac.kr" # 실제 도메인으로
+    #     # board_path_segment = "실제_게시판_경로/list.do" # 또는 board?code=xxx
+    #     pass
+    # elif current_college_code == "cem" and "menu" in dept.url: # 경상대학 URL 특성 반영 예시
+    #     # FIXME: 경상대학의 실제 공지사항 목록 URL로 수정
+    #     pass
 
     # 기본 URL 생성 규칙
     board_path_segment = BOARD_CODES.get(board_key)
@@ -49,36 +63,39 @@ def get_notice_list_url(dept: Department, board_key: str, page: int) -> str:
         logger.error(f"[{dept.name}] 유효하지 않은 board_key: {board_key}에 대한 BOARD_CODE 없음")
         return f"invalid_board_key_for_{dept.name}_{board_key}"
 
-    # department_base_url (예: https://eng.cnu.ac.kr/eng/department/aerospace.do)
-    # board_path_segment (예: board?code=grad_notice)
-    # 결합 결과 예시: https://eng.cnu.ac.kr/eng/department/aerospace.do/board?code=grad_notice&page=1
-    # 이 URL이 404를 반환한다면, 이 결합 방식 또는 BOARD_CODES 또는 department_base_url 자체가 잘못된 것임.
-    # 많은 경우 .do 와 같은 파일명 뒤에 /를 붙이고 경로를 추가하면 404가 발생합니다.
-    # 실제로는 department_base_url에서 파일명을 제거하고 board_path_segment를 붙이거나,
-    # 완전히 다른 URL 구조를 사용해야 할 수 있습니다.
+    # department_base_url이 파일명(.do 등)으로 끝나는 경우, 그 앞에 board_path_segment를 붙이면 안됨.
+    # 이 부분은 각 대학 사이트 구조에 따라 매우 달라질 수 있으므로,
+    # 가장 확실한 것은 각 Department 객체에 정확한 게시판 URL 템플릿을 갖도록 하는 것입니다.
+    # 임시방편으로, department_base_url이 특정 확장자로 끝나면 그 앞까지만 사용하도록 시도.
 
-    # 임시 수정: dept.url이 .do 등으로 끝나면, 그 앞부분까지만 사용 시도
-    if department_base_url.endswith(".do") or department_base_url.endswith(".jsp"):
-        # department_base_url = department_base_url.rsplit('/', 1)[0] # 예: .../aerospace.do -> ...
-        # 위와 같이 수정하면 의도치 않은 결과가 나올 수 있으므로,
-        # 각 학과별 정확한 URL 규칙을 파악하는 것이 중요합니다.
-        # 여기서는 원래 로직을 유지하고, get_notice_list_url 함수 자체의 개선이 필요함을 인지합니다.
-        pass
+    temp_base = department_base_url
+    # `.do`나 `.jsp` 등으로 끝나는 경우, 해당 파일명을 포함한 경로가 아닌,
+    # 상위 디렉토리에 board_path_segment를 적용해야 할 가능성이 높습니다.
+    # 예: https://example.com/path/to/page.do -> /board?code=... 를 붙이면 404
+    #     https://example.com/path/to/board?code=... 가 되어야 할 수 있음
+    # 이는 대학별로 규칙을 만들어야 정확합니다.
+    # 아래는 매우 일반적인 가정이므로, 실제로는 더 정교한 로직 또는 학과별 URL 템플릿이 필요합니다.
+    if any(temp_base.lower().endswith(ext) for ext in ['.do', '.jsp', '.php', '.html', '.htm']):
+        # 마지막 '/'를 찾아 그 이전까지를 base로 삼으려는 시도.
+        # 하지만 dept.url 자체가 게시판 목록이 아닌 학과 메인페이지일 가능성이 높으므로,
+        # 이 방식이 항상 옳지는 않습니다.
+        # logger.debug(f"URL이 파일명으로 끝나는 것으로 간주: {temp_base}. 상위 경로 사용 시도.")
+        # temp_base = temp_base.rsplit('/', 1)[0]
+        # 위와 같이 수정하면 department_base_url이 이미 /로 끝나면 문제가 될 수 있음
+        # 가장 안전한 것은 department_base_url에 BOARD_CODES[board_key]를 그대로 붙이는 것입니다.
+        # (단, BOARD_CODES의 값이 절대경로(/로 시작)가 아니거나, 완전한 URL이 아니어야 함)
+        # 현재 BOARD_CODES는 상대경로 형태이므로, 바로 붙여봅니다.
+        pass  # 현재 로직에서는 department_base_url에 바로 board_path_segment를 붙입니다.
 
-    final_url_base = f"{department_base_url}/{board_path_segment}"
-    if '?' in final_url_base:
+    final_url_base = f"{temp_base}/{board_path_segment}"
+    if '?' in final_url_base:  # board_path_segment에 이미 '?'가 있는 경우
         return f"{final_url_base}&page={page}"
     else:
         return f"{final_url_base}?page={page}"
 
 
-def college_code_from_url(college_url: str) -> Optional[str]:
-    # URL에서 대학 코드를 추출하는 간단한 예시 (예: https://eng.cnu.ac.kr -> eng)
-    try:
-        return college_url.split('/')[2].split('.')[0]
-    except IndexError:
-        return None
-
+# 이하 crawl_board, crawl_department_notices 함수는 이전 답변의 내용과 동일하게 유지합니다.
+# (첫 페이지만 가져오고, 에러 처리 로직이 개선된 버전)
 
 async def crawl_board(dept: Department, board_key: str):
     page = 1
@@ -97,9 +114,9 @@ async def crawl_board(dept: Department, board_key: str):
         last_post_id_db = last_notice.post_id if last_notice else "0"
     logger.debug(f"[{dept.name} ({board_key})] DB의 마지막 게시글 ID: {last_post_id_db} (첫 페이지만 수집 시 참고용)")
 
-    consecutive_404_errors = 0  # 연속 404 오류 카운터 (첫 페이지만 가져오므로 큰 의미는 없을 수 있음)
+    consecutive_404_errors = 0
 
-    while page <= max_pages_to_crawl:  # 이 루프는 page=1일 때만 실행됨
+    while page <= max_pages_to_crawl:
         list_url = get_notice_list_url(dept, board_key, page)
         if "invalid_board_key" in list_url:
             logger.error(f"[{dept.name} ({board_key})] 유효한 공지사항 목록 URL을 생성할 수 없습니다. 수집 중단.")
@@ -110,7 +127,7 @@ async def crawl_board(dept: Department, board_key: str):
         stop_crawling_current_board = False
         current_page_fetch_successful = False
 
-        try:  # JSON API 시도
+        try:
             data = await fetch_json(list_url)
             current_page_posts = data.get("posts") if isinstance(data, dict) else data
 
@@ -121,7 +138,6 @@ async def crawl_board(dept: Department, board_key: str):
 
             logger.trace(f"[{dept.name} ({board_key})] JSON API 성공. {len(current_page_posts)}개 항목 수신.")
             for p_item in current_page_posts:
-                # ... (JSON 파싱 및 증분 비교 로직은 이전과 동일) ...
                 post_id_str = str(p_item.get("id", ""))
                 title = clean_text(str(p_item.get("title", "")))
                 raw_url = p_item.get("url", "")
@@ -156,39 +172,38 @@ async def crawl_board(dept: Department, board_key: str):
             if stop_crawling_current_board: break
 
         except (ClientError, json.JSONDecodeError, ValueError, Exception) as e_json:
-            # === 수정된 오류 처리 부분 ===
-            if isinstance(e_json, ClientError) and hasattr(e_json, 'status') and e_json.status == 404:  # type: ignore
+            if isinstance(e_json, ClientError) and hasattr(e_json, 'status') and e_json.status == 404:
                 logger.warning(
                     f"[{dept.name} ({board_key})] JSON API 호출 실패 - 404 Not Found ({list_url}). HTML Fallback 시도.")
                 consecutive_404_errors += 1
             elif isinstance(e_json, asyncio.TimeoutError):
                 logger.warning(f"[{dept.name} ({board_key})] JSON API 호출 시간 초과 ({list_url}). HTML Fallback 시도.")
-            elif isinstance(e_json, ClientError):  # ClientConnectorError 등 status가 없는 ClientError
+            elif isinstance(e_json, ClientError):
                 logger.warning(
                     f"[{dept.name} ({board_key})] JSON API 호출 중 연결 오류 ({list_url}): {type(e_json).__name__} - {e_json}. HTML Fallback 시도.")
-                # 연결 오류 시에는 404가 아니므로 consecutive_404_errors를 증가시키지 않을 수 있음
-                # 또는 특정 횟수 이상 발생 시 해당 학과 건너뛰기 등의 로직 추가 가능
-            else:  # JSONDecodeError, ValueError, 기타 Exception
+            elif isinstance(e_json, json.JSONDecodeError):  # JSONDecodeError를 명시적으로 처리 (로그 메시지 개선)
                 logger.warning(
-                    f"[{dept.name} ({board_key})] JSON API 파싱 실패 또는 기타 오류 ({list_url}): {type(e_json).__name__} - {e_json}. HTML Fallback 시도.")
-            # === 수정 끝 ===
+                    f"[{dept.name} ({board_key})] JSON API 파싱 실패 ({list_url}): {e_json}. 응답이 JSON 형식이 아닙니다. HTML Fallback 시도.")
+            else:
+                logger.warning(
+                    f"[{dept.name} ({board_key})] JSON API 처리 중 기타 오류 ({list_url}): {type(e_json).__name__} - {e_json}. HTML Fallback 시도.")
 
-            # HTML Fallback 시도
             try:
                 html_content = await fetch_text(list_url)
-                ids_html = html_select(html_content, "td.no")
-                titles_html = html_select(html_content, "td.title a")
-                links_html = html_select(html_content, "td.title a", "href")
-                dates_html = html_select(html_content, "td.date")
+                # HTML Fallback 로직이 비어있거나, 해당 사이트의 HTML 구조에 맞는 파서가 필요합니다.
+                # 아래는 일반적인 예시이며, 실제 사이트 구조에 맞춰 CSS 선택자를 수정해야 합니다.
+                ids_html = html_select(html_content, "td.no")  # 예시 선택자
+                titles_html = html_select(html_content, "td.title a")  # 예시 선택자
+                links_html = html_select(html_content, "td.title a", "href")  # 예시 선택자
+                dates_html = html_select(html_content, "td.date")  # 예시 선택자
 
                 min_len = min(len(ids_html), len(titles_html), len(links_html), len(dates_html))
                 if min_len == 0 and (len(ids_html) + len(titles_html) + len(links_html) + len(dates_html) > 0):
-                    logger.warning(f"[{dept.name} ({board_key})] HTML에서 일부 정보만 추출됨. 파싱 건너뜀.")
+                    logger.warning(f"[{dept.name} ({board_key})] HTML에서 일부 정보만 추출됨. 파싱 건너뜀. URL: {list_url}")
                 elif min_len > 0:
-                    logger.trace(f"[{dept.name} ({board_key})] HTML Fallback 성공. {min_len}개 항목 후보 발견.")
+                    logger.trace(f"[{dept.name} ({board_key})] HTML Fallback으로 {min_len}개 항목 후보 발견. URL: {list_url}")
 
                 for i in range(min_len):
-                    # ... (HTML 파싱 및 증분 비교 로직은 이전과 동일) ...
                     post_id_str = clean_text(ids_html[i])
                     if not post_id_str.isdigit():
                         id_match_from_url = re.search(r'(?:idx|id|no|seq)=(\d+)', links_html[i], re.I)
@@ -228,28 +243,22 @@ async def crawl_board(dept: Department, board_key: str):
                 if stop_crawling_current_board: break
 
             except ClientError as e_html_fetch:
-                # === 수정된 오류 처리 부분 ===
-                if hasattr(e_html_fetch, 'status') and e_html_fetch.status == 404:  # type: ignore
+                if hasattr(e_html_fetch, 'status') and e_html_fetch.status == 404:
                     logger.error(
-                        f"[{dept.name} ({board_key})] HTML Fallback 처리 중 HTTP 오류 - 404 Not Found ({list_url}): {e_html_fetch.message}")
+                        f"[{dept.name} ({board_key})] HTML Fallback URL 접근 실패 - 404 Not Found ({list_url}): {e_html_fetch.message}")
                     consecutive_404_errors += 1
-                elif isinstance(e_html_fetch, ClientError):  # status 없는 ClientError
+                elif isinstance(e_html_fetch, ClientError):
                     logger.error(
-                        f"[{dept.name} ({board_key})] HTML Fallback 처리 중 연결 오류 ({list_url}): {type(e_html_fetch).__name__} - {e_html_fetch}")
-                else:  # 기타 예외
-                    logger.error(
-                        f"[{dept.name} ({board_key})] HTML Fallback 처리 중 알 수 없는 오류 ({list_url}): {type(e_html_fetch).__name__} - {e_html_fetch}")
-                # === 수정 끝 ===
+                        f"[{dept.name} ({board_key})] HTML Fallback URL 접근 중 연결 오류 ({list_url}): {type(e_html_fetch).__name__} - {e_html_fetch}")
             except Exception as e_html_parse:
                 logger.error(f"[{dept.name} ({board_key})] HTML Fallback 파싱 중 알 수 없는 오류 ({list_url}): {e_html_parse}")
 
-        # 루프 종료 조건 (첫 페이지만 가져오므로, 여기서 항상 break 됩니다)
         if stop_crawling_current_board:
             logger.info(f"[{dept.name} ({board_key})] 증분 수집 조건으로 인해 첫 페이지 수집 중단.")
-        elif not current_page_fetch_successful and consecutive_404_errors >= 1:
-            logger.warning(f"[{dept.name} ({board_key})] 첫 페이지부터 404 오류 발생 또는 연결 실패. 해당 게시판 수집 중단.")
-        elif not current_page_fetch_successful:
-            logger.info(f"[{dept.name} ({board_key})] 첫 페이지에서 데이터를 가져오지 못했습니다.")
+        elif not current_page_fetch_successful and consecutive_404_errors >= 1:  # 첫 페이지가 404이거나 연결 실패
+            logger.warning(f"[{dept.name} ({board_key})] 첫 페이지부터 404 오류 또는 연결 실패. 해당 게시판 수집 중단. URL: {list_url}")
+        elif not current_page_fetch_successful:  # 404는 아니지만 다른 이유로 데이터 못 얻음
+            logger.info(f"[{dept.name} ({board_key})] 첫 페이지에서 데이터를 가져오지 못했습니다. URL: {list_url}")
 
         if posts_data:
             try:
@@ -261,7 +270,7 @@ async def crawl_board(dept: Department, board_key: str):
             except Exception as e_db:
                 logger.opt(exception=True).error(f"[{dept.name} ({board_key})] 공지사항 DB 저장 중 오류: {e_db}")
 
-        break  # 첫 페이지만 처리하므로 루프를 명시적으로 종료
+        break
 
     if inserted_count > 0:
         logger.success(f"📄 [{dept.name} ({board_key})] 첫 페이지 새 공지 총 {inserted_count}건 수집 완료.")
@@ -278,5 +287,5 @@ async def crawl_department_notices(dept: Department):
     for board_key_val in BOARD_CODES:
         try:
             await crawl_board(dept, board_key_val)
-        except Exception as e:  # crawl_board 내에서 발생하는 예외는 이미 상세히 로깅될 것이므로, 여기서는 간단히만
+        except Exception as e:
             logger.opt(exception=True).error(f"[{dept.name} ({board_key_val})] 게시판 크롤링 함수 실행 중 최종 예외 발생: {e}")
