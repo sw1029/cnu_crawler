@@ -11,9 +11,16 @@ def get_driver(headless: bool = True):
     if headless:
         opts.add_argument("--headless")
         opts.add_argument("--disable-gpu")
-    # Friendly UA
+    opts.add_argument("--no-sandbox")
+    opts.add_argument("--disable-dev-shm-usage")
     opts.add_argument(f'user-agent={DEFAULT_HEADERS["User-Agent"]}')
-    driver = webdriver.Chrome(options=opts)
+
+    # ✅ performance 로그를 위한 로그 설정 추가
+    caps = DesiredCapabilities.CHROME.copy()
+    caps["goog:loggingPrefs"] = {"performance": "ALL"}
+
+    driver = webdriver.Chrome(options=opts, desired_capabilities=caps)
+
     try:
         yield driver
     finally:
