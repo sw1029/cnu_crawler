@@ -2,6 +2,7 @@
 from loguru import logger
 import json  # aiohttp는 이미 JSONDecodeError를 발생시킬 수 있지만, 명시적 import
 from aiohttp import ClientError  # fetcher에서 발생할 수 있는 예외
+import re
 
 from cnu_crawler.core.fetcher import fetch_json, fetch_text
 from cnu_crawler.core.parser import html_select
