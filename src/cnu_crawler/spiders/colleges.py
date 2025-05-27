@@ -22,15 +22,9 @@ def _generate_college_code(name: str, prefix: str = "coll") -> str:
     """대학 이름과 접두사를 기반으로 고유 코드를 생성합니다."""
     cleaned_name = re.sub(r'\s+', '', name.lower())
     alnum_name = re.sub(r'[^a-z0-9]', '', cleaned_name)
+    hash_str_part = str(hash(name)).replace('-', '')[:6]  # 이전 TypeError 수정 반영
 
-    # hash(name)의 결과를 문자열로 변환 후 슬라이싱합니다.
-    # hash() 결과가 음수일 수 있으므로, str() 변환 후 '-' 문자를 처리하거나,
-    # hex()를 사용하여 일관된 형식의 문자열을 얻는 것을 고려할 수 있습니다.
-    # 여기서는 간단히 str()을 사용하고, 음수 부호가 포함될 수 있음을 인지합니다.
-    # 더 일관된 결과를 위해 hex(hash(name))를 사용하거나, str(abs(hash(name)))을 사용할 수 있습니다.
-    hash_str_part = str(hash(name)).replace('-', '')[:6]  # 음수 부호 제거 후 6자리
-
-    return f"{prefix}_{alnum_name[:20]}_{hash_str_part}"  # 수정된 부분
+    return f"{prefix}_{alnum_name[:20]}_{hash_str_part}"
 
 
 def _save_colleges_to_db(colleges_data: List[Dict], log_prefix: str):
@@ -79,7 +73,7 @@ def _save_colleges_to_db(colleges_data: List[Dict], log_prefix: str):
 # --- Main Discover Functions ---
 
 async def discover_plus_normal_colleges(root_url: str = ROOT_URL) -> List[Dict]:
-    logger.info(f"🔍 일반 단과대학 목록 탐색 시작 (출처: {root_url})")  #
+    logger.info(f"🔍 일반 단과대학 목록 탐색 시작 (출처: {root_url})")
     colleges_data: List[Dict] = []
     COLLEGES_CONTAINER_XPATH = "/html/body/div[3]/div/div[3]"
     INDIVIDUAL_COLLEGE_LINK_XPATH = ".//ul//li/a"
@@ -98,7 +92,7 @@ async def discover_plus_normal_colleges(root_url: str = ROOT_URL) -> List[Dict]:
                     f"[{root_url}] 컨테이너('{COLLEGES_CONTAINER_XPATH}') 내에서 대학 링크 ('{INDIVIDUAL_COLLEGE_LINK_XPATH}')를 찾지 못했습니다.")
                 return []
 
-            logger.info(f"[{root_url}] {len(college_link_elements)}개의 일반 단과대학 링크 후보 발견.")  #
+            logger.info(f"[{root_url}] {len(college_link_elements)}개의 일반 단과대학 링크 후보 발견.")
             for idx, link_element in enumerate(college_link_elements):
                 college_name_raw = link_element.get_attribute("textContent")
                 college_name = clean_text(college_name_raw if college_name_raw else "")
@@ -109,10 +103,11 @@ async def discover_plus_normal_colleges(root_url: str = ROOT_URL) -> List[Dict]:
                     continue
 
                 college_url = urljoin(root_url, college_url_raw)
-                college_code = _generate_college_code(college_name, prefix="plus_normal")  #
+                # _generate_college_code 함수를 호출하여 college_code 변수에 할당
+                college_code = _generate_college_code(college_name, prefix="plus_normal")
 
                 colleges_data.append({
-                    "code": college_code,
+                    "code": college_code,  # 할당된 college_code 변수 사용
                     "name": college_name,
                     "url": college_url,
                     "college_type": "normal_college"
@@ -121,12 +116,12 @@ async def discover_plus_normal_colleges(root_url: str = ROOT_URL) -> List[Dict]:
         _save_colleges_to_db(colleges_data, "Plus 일반 단과대학")
         return colleges_data
     except Exception as e:
-        logger.opt(exception=True).error(f"Plus 일반 단과대학 목록 탐색 중 예외: {e}")  #
+        logger.opt(exception=True).error(f"Plus 일반 단과대학 목록 탐색 중 예외: {e}")
         return []
 
 
 async def discover_grad_page_colleges_and_depts(grad_info_url: str = "https://grad.cnu.ac.kr/grad/grad/normal-grad.do"):
-    logger.info(f"🎓 일반대학원 페이지({grad_info_url})에서 '대학' 단위(소속) 탐색 시작...")  #
+    logger.info(f"🎓 일반대학원 페이지({grad_info_url})에서 '대학' 단위(소속) 탐색 시작...")
     colleges_data: List[Dict] = []
 
     try:
@@ -143,9 +138,11 @@ async def discover_grad_page_colleges_and_depts(grad_info_url: str = "https://gr
                 name = clean_text(name_raw)
                 if name.endswith("대학") and len(name) > 3 and name not in processed_college_names \
                         and not any(ex in name for ex in ["공지사항", "자료실"]):
-                    college_code = _generate_college_code(name, prefix="gradpage")  #
+                    # _generate_college_code 함수를 호출하여 college_code 변수에 할당
+                    college_code = _generate_college_code(name, prefix="gradpage")
+
                     colleges_data.append({
-                        "code": code,
+                        "code": college_code,  # 할당된 college_code 변수 사용 (이전 오류 지점)
                         "name": f"{name}(일반대학원소속)",
                         "url": grad_info_url,
                         "college_type": "grad_page_college"
@@ -153,11 +150,14 @@ async def discover_grad_page_colleges_and_depts(grad_info_url: str = "https://gr
                     processed_college_names.add(name)
             logger.info(f"일반대학원 페이지에서 {len(colleges_data)}개의 '대학' 단위 정보 추출.")
 
-        if not colleges_data:
+        if not colleges_data:  # 위에서 h4를 찾지 못했거나, 필터링 후 아무것도 남지 않은 경우
             logger.info(f"일반대학원 페이지에서 개별 '대학' 단위를 찾지 못해 '일반대학원' 전체를 하나의 College로 등록합니다.")
+            # '일반대학원(전체)'에 대한 코드 생성
+            general_grad_name = "일반대학원(전체)"
+            general_grad_code = _generate_college_code(general_grad_name, prefix="gradpage_main")
             colleges_data.append({
-                "code": "grad_school_main_unit",
-                "name": "일반대학원(전체)",
+                "code": general_grad_code,
+                "name": general_grad_name,
                 "url": grad_info_url,
                 "college_type": "grad_page_college"
             })
@@ -165,7 +165,7 @@ async def discover_grad_page_colleges_and_depts(grad_info_url: str = "https://gr
         _save_colleges_to_db(colleges_data, "일반대학원 페이지 기반 '대학' 단위")
         return colleges_data
     except Exception as e:
-        logger.opt(exception=True).error(f"일반대학원 페이지({grad_info_url}) '대학' 단위 탐색 중 예외: {e}")  #
+        logger.opt(exception=True).error(f"일반대학원 페이지({grad_info_url}) '대학' 단위 탐색 중 예외: {e}")
         return []
 
 
@@ -199,10 +199,11 @@ async def discover_plus_all_graduate_schools(plus_url: str = ROOT_URL) -> List[D
                 url = urljoin(plus_url, url_raw)
                 college_type = "plus_general_grad" if (idx == 0) else "plus_special_grad"
                 code_prefix = "plus_gen_grad" if college_type == "plus_general_grad" else "plus_spec_grad"
+                # _generate_college_code 함수를 호출하여 college_code 변수에 할당
                 college_code = _generate_college_code(name, prefix=code_prefix)
 
                 colleges_data.append({
-                    "code": college_code,
+                    "code": college_code,  # 할당된 college_code 변수 사용
                     "name": name,
                     "url": url,
                     "college_type": college_type
