@@ -10,3 +10,4 @@ alembic>=1.13
 pandas>=2.2         # CSV/Parquet
 apscheduler>=3.10
 python-dotenv>=1.0  # (옵션) 환경변수
+loguru
