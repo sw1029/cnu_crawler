@@ -2,7 +2,6 @@
 from contextlib import contextmanager
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
 
 from cnu_crawler.config import SELENIUM_DRIVER, DEFAULT_HEADERS
 
@@ -16,11 +15,10 @@ def get_driver(headless: bool = True):
     opts.add_argument("--disable-dev-shm-usage")
     opts.add_argument(f'user-agent={DEFAULT_HEADERS["User-Agent"]}')
 
-    # ✅ performance 로그를 위한 로그 설정 추가
-    caps = DesiredCapabilities.CHROME.copy()
-    caps["goog:loggingPrefs"] = {"performance": "ALL"}
+    # ✅ 최신 방식: performance 로그를 위해 options에 직접 capability 추가
+    opts.set_capability("goog:loggingPrefs", {"performance": "ALL"})
 
-    driver = webdriver.Chrome(options=opts, desired_capabilities=caps)
+    driver = webdriver.Chrome(options=opts)
 
     try:
         yield driver
