@@ -4,9 +4,9 @@ import re
 from typing import List, Dict
 from loguru import logger
 
-from src.cnu_crawler.core.browser import get_driver
-from src.cnu_crawler.core.fetcher import fetch_json
-from src.cnu_crawler.storage import College, get_session
+from cnu_crawler.core.browser import get_driver
+from cnu_crawler.core.fetcher import fetch_json
+from cnu_crawler.storage import College, get_session
 
 MENU_PATTERN = re.compile(r'collegeList\((\d+)\)')
 

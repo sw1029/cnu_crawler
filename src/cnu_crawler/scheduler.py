@@ -4,13 +4,13 @@ import asyncio
 from loguru import logger
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
-from src.cnu_crawler.config import ROOT_URL, SCHEDULE_MINUTES
-from storage.models import init_db, get_session, College, Department
-from spiders.colleges import discover_colleges
-from spiders.departments import crawl_departments
-from spiders.notices import crawl_department_notices
-from storage.csv_sink import dump_daily_csv
-from core.fetcher import Fetcher
+from cnu_crawler.config import ROOT_URL, SCHEDULE_MINUTES
+from cnu_crawler.storage.models import init_db, get_session, College, Department
+from cnu_crawler.spiders.colleges import discover_colleges
+from cnu_crawler.spiders.departments import crawl_departments
+from cnu_crawler.spiders.notices import crawl_department_notices
+from cnu_crawler.storage.csv_sink import dump_daily_csv
+from cnu_crawler.core.fetcher import Fetcher
 
 async def run_pipeline():
     # 1) 대학 목록 (변동 적음) – 하루 1회만 탐색

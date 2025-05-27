@@ -3,7 +3,7 @@ from typing import Any, Optional
 
 from aiohttp_retry import RetryClient, ExponentialRetry
 
-from src.cnu_crawler.config import DEFAULT_HEADERS
+from cnu_crawler.config import DEFAULT_HEADERS
 
 class Fetcher:
     """Singleton-style 비동기 HTTP fetcher."""

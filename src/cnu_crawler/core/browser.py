@@ -3,7 +3,7 @@ from contextlib import contextmanager
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 
-from src.cnu_crawler.config import SELENIUM_DRIVER, DEFAULT_HEADERS
+from cnu_crawler.config import SELENIUM_DRIVER, DEFAULT_HEADERS
 
 @contextmanager
 def get_driver(headless: bool = True):

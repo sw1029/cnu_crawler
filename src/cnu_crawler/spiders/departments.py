@@ -1,9 +1,9 @@
 # cnu_crawler/spiders/departments.py
 from loguru import logger
 
-from src.cnu_crawler.core.fetcher import fetch_json, fetch_text
-from src.cnu_crawler.core.parser import html_select
-from src.cnu_crawler.storage import College, Department, get_session
+from cnu_crawler.core.fetcher import fetch_json, fetch_text
+from cnu_crawler.core.parser import html_select
+from cnu_crawler.storage import College, Department, get_session
 
 async def crawl_departments(college: College):
     logger.info(f"🏫 {college.name} 학부/학과 크롤링")
