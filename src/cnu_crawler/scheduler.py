@@ -24,6 +24,8 @@ async def run_pipeline():
         colleges_db = sess.query(College).all()
     for college_obj in colleges_db: # 변수명 변경 (college -> college_obj)
         await crawl_departments(college_obj) # college_obj 전달
+        logger.debug(f"'{college_obj.name}' 학과 크롤링 후 1초 대기...")
+        await asyncio.sleep(1)  # 각 대학의 학과 정보 크롤링 후 1초 대기
     with get_session() as sess:
         depts = sess.query(Department).all()
     # 병렬 크롤링
