@@ -4,7 +4,7 @@ from pathlib import Path
 from sqlalchemy import create_engine, Integer, String, DateTime, ForeignKey, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, Session
 
-from ..config import DATA_DIR
+from src.cnu_crawler.config import DATA_DIR
 
 DB_PATH = Path(DATA_DIR) / "notices.sqlite3"
 ENGINE = create_engine(f"sqlite:///{DB_PATH}", echo=False, future=True)

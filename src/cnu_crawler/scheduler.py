@@ -1,11 +1,10 @@
 # cnu_crawler/scheduler.py
 import argparse
 import asyncio
-from functools import partial
 from loguru import logger
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
-from config import ROOT_URL, SCHEDULE_MINUTES
+from src.cnu_crawler.config import ROOT_URL, SCHEDULE_MINUTES
 from storage.models import init_db, get_session, College, Department
 from spiders.colleges import discover_colleges
 from spiders.departments import crawl_departments

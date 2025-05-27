@@ -1,13 +1,11 @@
 # cnu_crawler/spiders/notices.py
-import asyncio
-import re
 from datetime import datetime
 from typing import Dict, List
 from loguru import logger
 
-from ..core.fetcher import fetch_json, fetch_text
-from ..core.parser import html_select
-from ..storage.models import Department, Notice, get_session
+from src.cnu_crawler.core.fetcher import fetch_json, fetch_text
+from src.cnu_crawler.core.parser import html_select
+from src.cnu_crawler.storage import Department, Notice, get_session
 
 BOARD_CODES = {"undergrad": "board?code=undergrad_notice",
                "grad": "board?code=grad_notice"}

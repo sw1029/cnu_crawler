@@ -4,7 +4,7 @@ import pandas as pd
 from datetime import datetime
 
 from .models import ENGINE
-from ..config import DATA_DIR
+from src.cnu_crawler.config import DATA_DIR
 
 def dump_daily_csv():
     ts = datetime.utcnow().strftime("%Y%m%d")

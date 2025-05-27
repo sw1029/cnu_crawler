@@ -1,11 +1,9 @@
 # cnu_crawler/core/fetcher.py
-import asyncio
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
-from aiohttp import ClientSession
 from aiohttp_retry import RetryClient, ExponentialRetry
 
-from ..config import DEFAULT_HEADERS
+from src.cnu_crawler.config import DEFAULT_HEADERS
 
 class Fetcher:
     """Singleton-style 비동기 HTTP fetcher."""

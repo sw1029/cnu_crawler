@@ -1,14 +1,12 @@
 # cnu_crawler/spiders/colleges.py
-import asyncio
 import json
 import re
 from typing import List, Dict
 from loguru import logger
 
-from ..core.browser import get_driver
-from ..core.fetcher import fetch_json
-from ..core.parser import html_select
-from ..storage.models import College, get_session
+from src.cnu_crawler.core.browser import get_driver
+from src.cnu_crawler.core.fetcher import fetch_json
+from src.cnu_crawler.storage import College, get_session
 
 MENU_PATTERN = re.compile(r'collegeList\((\d+)\)')
 
