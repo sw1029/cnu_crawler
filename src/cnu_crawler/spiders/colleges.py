@@ -1,118 +1,131 @@
 # cnu_crawler/spiders/colleges.py
-import json
 import re
 from typing import List, Dict
-from loguru import logger
+from urllib.parse import urljoin  # 상대 URL을 절대 URL로 변환하기 위함
 
-# Selenium WebDriverWait 및 By 추가 (필요시 DOM 직접 상호작용용)
-# from selenium.webdriver.support.ui import WebDriverWait
-# from selenium.webdriver.support import expected_conditions as EC
-# from selenium.webdriver.common.by import By
+from loguru import logger
+from selenium.webdriver.common.by import By  # XPath 등으로 요소를 찾기 위함
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 
 from cnu_crawler.core.browser import get_driver
-from cnu_crawler.core.fetcher import fetch_json
 from cnu_crawler.storage import College, get_session
-
-# FIXME: 이 패턴은 'collegeList(숫자)' 형태의 JS 호출을 찾기 위함.
-# 실제 웹사이트의 대학 목록 API 호출 방식이 변경되었다면 이 패턴도 수정 필요.
-MENU_PATTERN = re.compile(r'collegeList\((\d+)\)')  #
-
-# FIXME: 실제 API 엔드포인트에 사용될 수 있는 키워드. 변경 시 수정.
-COLLEGE_API_KEYWORD = "collegeList"
+from cnu_crawler.utils import clean_text  # 텍스트 정제용
 
 
 async def discover_colleges(root_url: str) -> List[Dict]:
-    """메인/대학 메뉴 네트워크 요청을 가로채 실제 API 패턴을 추출."""
-    logger.info("🔍 대학 목록 탐색 중 …")
-    colleges: List[Dict] = []
+    """
+    메인 페이지에서 직접 HTML을 파싱하여 대학 목록을 추출합니다.
+    사용자가 제공한 XPath 정보를 기반으로 작동합니다.
+    """
+    logger.info(f"🔍 대학 목록 탐색 중 (HTML 직접 파싱 방식): {root_url}")
+    colleges_data: List[Dict] = []
+
+    # 사용자 제공 XPath: 대학 목록을 포함하는 컨테이너
+    COLLEGES_CONTAINER_XPATH = "/html/body/div[3]/div/div[3]"
+    # 컨테이너 내부에서 각 대학을 나타내는 링크(<a> 태그)를 찾는 XPath
+    # 예: /ul/li/a (li의 인덱스는 다양할 수 있으므로 //ul//li/a 와 같이 좀 더 일반적인 패턴 사용)
+    # 또는 /ul/li/a (모든 li 밑의 a를 찾음)
+    # 사용자가 "/ul/li[6]/a"와 같은 구체적인 예를 주셨으므로, 이 패턴을 일반화합니다.
+    INDIVIDUAL_COLLEGE_LINK_XPATH = ".//ul//li/a"  # 컨테이너 XPath 기준 상대 경로
 
     try:
         with get_driver() as driver:
-            driver.get(root_url)  #
+            driver.get(root_url)
 
-            # 만약 특정 버튼 클릭 등 사용자 상호작용 후 API가 호출된다면,
-            # 아래와 같은 WebDriverWait 로직이 필요할 수 있습니다.
-            # 예: WebDriverWait(driver, 10).until(
-            #         EC.presence_of_element_located((By.ID, "some_menu_button"))
-            #     ).click()
-            # 그리고 API 호출이 완료될 시간을 벌기 위해 time.sleep() 또는 다른 대기 조건 사용 가능
-
-            logs = driver.get_log("performance")  #
-
-        # 네트워크 로그에서 collegeList API 추출
-        api_urls = set()
-        for l in logs:
             try:
-                log_message = json.loads(l["message"])["message"]
-                if "params" in log_message and "request" in log_message["params"]:
-                    url = log_message["params"]["request"]["url"]
-                    if COLLEGE_API_KEYWORD in url:  #
-                        api_urls.add(url)
-            except (json.JSONDecodeError, KeyError) as e:
-                logger.trace(f"네트워크 로그 파싱 중 오류 (무시 가능): {l}")
-                continue
+                WebDriverWait(driver, 15).until(
+                    EC.presence_of_element_located((By.XPATH, COLLEGES_CONTAINER_XPATH))
+                )
+                logger.info(f"대학 목록 컨테이너 XPath '{COLLEGES_CONTAINER_XPATH}' 발견됨.")
+            except Exception as e_wait:
+                logger.error(f"대학 목록 컨테이너 XPath '{COLLEGES_CONTAINER_XPATH}'를 찾는 중 타임아웃 또는 오류: {e_wait}")
+                logger.debug(f"현재 페이지 소스 (일부): {driver.page_source[:1000]}")
+                return []
 
-        if not api_urls:
-            logger.warning(f"'{COLLEGE_API_KEYWORD}' 키워드를 포함하는 API URL을 찾지 못했습니다. 웹사이트 구조 변경 가능성 있음.")
-            return []
+            container_element = driver.find_element(By.XPATH, COLLEGES_CONTAINER_XPATH)
+            college_link_elements = container_element.find_elements(By.XPATH, INDIVIDUAL_COLLEGE_LINK_XPATH)
 
-        logger.info(f"발견된 대학 API URL 후보: {api_urls}")
+            if not college_link_elements:
+                logger.warning(
+                    f"컨테이너('{COLLEGES_CONTAINER_XPATH}') 내에서 대학 링크 ('{INDIVIDUAL_COLLEGE_LINK_XPATH}')를 찾지 못했습니다. XPath 또는 웹사이트 구조 확인 필요.")
+                return []
 
-        for api_idx, api_url in enumerate(api_urls):
-            try:
-                logger.debug(f"API URL ({api_idx + 1}/{len(api_urls)}) 처리 중: {api_url}")
-                data = await fetch_json(api_url)  #
+            logger.info(f"{len(college_link_elements)}개의 대학 링크 발견.")
 
-                # FIXME: 실제 API 응답 구조에 따라 아래 키들을 수정해야 합니다.
-                # 예: data가 리스트가 아니라면, data.get('resultList', []) 등으로 접근
-                if not isinstance(data, list):
-                    logger.warning(f"API 응답이 리스트 형태가 아닙니다: {api_url}, 데이터: {str(data)[:200]}")
-                    # 다양한 API 응답 구조에 대한 처리 추가 가능
-                    # if isinstance(data, dict) and "key_for_college_list" in data:
-                    # data = data["key_for_college_list"]
-                    # else:
-                    # continue # 다음 API URL 시도
-                    continue
+            for idx, link_element in enumerate(college_link_elements):
+                try:
+                    college_name = clean_text(link_element.text)
+                    college_url = link_element.get_attribute("href")
 
-                for item_idx, c_item in enumerate(data):
-                    # FIXME: 'collegeCd', 'collegeNm', 'url' 키가 실제 API 응답과 다를 경우 수정 필요.
-                    code = c_item.get("collegeCd")  #
-                    name = c_item.get("collegeNm")  #
-                    url = c_item.get("url")  #
-
-                    if not all([code, name, url]):
-                        logger.warning(f"항목 {item_idx}에 필수 정보(code, name, url)가 누락되었습니다: {c_item}")
+                    if not college_name:
+                        logger.warning(
+                            f"링크 요소에서 대학 이름을 찾을 수 없습니다 (인덱스: {idx}, 요소 HTML: {link_element.get_attribute('outerHTML')[:100]}). 건너뜁니다.")
+                        continue
+                    if not college_url:  # URL이 없는 경우는 거의 없겠지만 방어 코드
+                        logger.warning(f"링크 요소에서 URL을 찾을 수 없습니다 (이름: {college_name}). 건너뜁니다.")
                         continue
 
-                    colleges.append({"code": str(code), "name": str(name), "url": str(url)})
+                    college_url = urljoin(root_url, college_url)
 
-                # 여러 API URL 중 첫 번째 유효한 응답만 사용할 경우 break
-                if colleges:  # 유효한 대학 정보를 하나라도 찾았다면
-                    logger.info(f"API URL {api_url} 에서 대학 목록 성공적으로 추출.")
-                    break
+                    # 대학 'code' 생성: URL의 마지막 유효한 경로 세그먼트 또는 이름 기반 슬러그
+                    url_path_segments = [part for part in college_url.split('/') if
+                                         part and part not in ('http:', 'https:', '')]
+                    if url_path_segments:
+                        # 예: http://example.com/college/abc -> abc
+                        # 예: http://example.com/college/abc.html -> abc.html
+                        # 예: http://example.com/college/abc?id=123 -> abc
+                        college_code_candidate = url_path_segments[-1].split('?')[0].split('#')[0]
+                    else:  # URL에서 코드 추출이 어려울 경우 이름 기반
+                        college_code_candidate = college_name
 
+                    # 코드 정제: 소문자, 공백->'-', 특수문자 제거, 길이 제한
+                    college_code = re.sub(r'\s+', '-', college_code_candidate.lower())
+                    college_code = re.sub(r'[^a-z0-9-_.]', '', college_code)[:50]  # 점(.)은 유지 (예: .html)
+                    if not college_code:  # 모든 문자가 제거된 경우 대비
+                        college_code = f"college-{idx + 1}"
 
-            except Exception as e:
-                logger.error(f"대학 목록 API ({api_url}) 처리 중 오류: {e}")
-                continue
+                    colleges_data.append({
+                        "code": college_code,
+                        "name": college_name,
+                        "url": college_url
+                    })
+                    logger.debug(f"추출된 대학: code='{college_code}', name='{college_name}', url='{college_url}'")
 
-        if not colleges:
-            logger.error("어떤 API에서도 대학 목록을 추출하지 못했습니다.")
-            return []
+                except Exception as e_parse_element:
+                    logger.error(f"개별 대학 링크 요소 파싱 중 오류 (인덱스: {idx}): {e_parse_element}")
+                    logger.debug(f"오류 발생 요소 HTML (일부): {link_element.get_attribute('outerHTML')[:200]}")
 
-        # DB upsert
-        with get_session() as sess:
-            for c in colleges:
-                obj = sess.query(College).filter_by(code=c["code"]).one_or_none()  #
-                if obj:
-                    obj.name, obj.url = c["name"], c["url"]  #
-                else:
-                    obj = College(**c)  #
-                    sess.add(obj)  #
-            sess.commit()  #
-        logger.success(f"총 {len(colleges)}개 대학 정보 업데이트 완료.")
-        return colleges
-
-    except Exception as e:
-        logger.opt(exception=True).error("discover_colleges 실행 중 예외 발생")
+    except Exception as e_main:
+        logger.opt(exception=True).error(f"discover_colleges (HTML 파싱) 실행 중 예외 발생: {e_main}")
         return []
+
+    if not colleges_data:
+        logger.warning("추출된 대학 데이터가 없습니다.")
+        return []
+
+    try:
+        with get_session() as sess:
+            updated_count = 0
+            added_count = 0
+            for c_data in colleges_data:
+                obj = sess.query(College).filter_by(code=c_data["code"]).one_or_none()
+                if obj:
+                    if obj.name != c_data["name"] or obj.url != c_data["url"]:
+                        obj.name = c_data["name"]
+                        obj.url = c_data["url"]
+                        updated_count += 1
+                else:
+                    obj = College(**c_data)
+                    sess.add(obj)
+                    added_count += 1
+            if updated_count > 0 or added_count > 0:
+                sess.commit()
+                logger.success(f"대학 정보 DB 업데이트: {added_count}개 추가, {updated_count}개 수정 (총 {len(colleges_data)}개 처리).")
+            else:
+                logger.info("DB에 변경된 대학 정보가 없습니다.")
+    except Exception as e_db:
+        logger.opt(exception=True).error(f"대학 정보 DB 저장 중 오류: {e_db}")
+        # sess.rollback() # 필요한 경우 롤백
+
+    return colleges_data
