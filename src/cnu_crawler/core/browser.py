@@ -13,7 +13,7 @@ def get_driver(headless: bool = True):
         opts.add_argument("--disable-gpu")
     # Friendly UA
     opts.add_argument(f'user-agent={DEFAULT_HEADERS["User-Agent"]}')
-    driver = webdriver.Chrome(executable_path=SELENIUM_DRIVER, options=opts)
+    driver = webdriver.Chrome(options=opts)
     try:
         yield driver
     finally:
