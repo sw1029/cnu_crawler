@@ -3,7 +3,7 @@ import asyncio
 import json
 import re  # HTML에서 ID 추출 시 필요할 수 있음
 from datetime import datetime
-from typing import Dict, List
+from typing import Dict, List, Optional
 from urllib.parse import urljoin
 
 from loguru import logger
