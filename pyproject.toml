@@ -3,21 +3,21 @@ name = "cnu_crawler"
 version = "0.1.0"
 description = "CNU 대학 공지사항 크롤러"
 requires-python = ">=3.8"
-
-[project.dependencies]
-aiohttp = ">=3.9"
-aiohttp-retry = ">=2.8"
-aiodns = ">=3.1"
-aiofiles = ">=23.2"
-beautifulsoup4 = ">=4.12"
-lxml = ">=5.2"
-selenium = ">=4.21"
-SQLAlchemy = ">=2.0"
-alembic = ">=1.13"
-pandas = ">=2.2"
-apscheduler = ">=3.10"
-python-dotenv = ">=1.0"
-loguru = ">=0.7"
+dependencies = [
+  "aiohttp>=3.9",
+  "aiohttp-retry>=2.8",
+  "aiodns>=3.1",
+  "aiofiles>=23.2",
+  "beautifulsoup4>=4.12",
+  "lxml>=5.2",
+  "selenium>=4.21",
+  "SQLAlchemy>=2.0",
+  "alembic>=1.13",
+  "pandas>=2.2",
+  "apscheduler>=3.10",
+  "python-dotenv>=1.0",
+  "loguru>=0.7"
+]
 
 [build-system]
 requires = ["setuptools"]
