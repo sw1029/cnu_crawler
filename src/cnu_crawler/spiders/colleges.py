@@ -21,13 +21,8 @@ async def discover_colleges(root_url: str) -> List[Dict]:
     logger.info(f"🔍 대학 목록 탐색 중 (HTML 직접 파싱 방식): {root_url}")
     colleges_data: List[Dict] = []
 
-    # 사용자 제공 XPath: 대학 목록을 포함하는 컨테이너
     COLLEGES_CONTAINER_XPATH = "/html/body/div[3]/div/div[3]"
-    # 컨테이너 내부에서 각 대학을 나타내는 링크(<a> 태그)를 찾는 XPath
-    # 예: /ul/li/a (li의 인덱스는 다양할 수 있으므로 //ul//li/a 와 같이 좀 더 일반적인 패턴 사용)
-    # 또는 /ul/li/a (모든 li 밑의 a를 찾음)
-    # 사용자가 "/ul/li[6]/a"와 같은 구체적인 예를 주셨으므로, 이 패턴을 일반화합니다.
-    INDIVIDUAL_COLLEGE_LINK_XPATH = ".//ul//li/a"  # 컨테이너 XPath 기준 상대 경로
+    INDIVIDUAL_COLLEGE_LINK_XPATH = ".//ul//li/a"
 
     try:
         with get_driver() as driver:
@@ -55,34 +50,34 @@ async def discover_colleges(root_url: str) -> List[Dict]:
 
             for idx, link_element in enumerate(college_link_elements):
                 try:
-                    college_name = clean_text(link_element.text)
+                    # .text 대신 get_attribute("textContent") 사용
+                    college_name_raw = link_element.get_attribute("textContent")
+                    if college_name_raw is None:  # textContent가 null일 수도 있음
+                        college_name_raw = ""
+                    college_name = clean_text(college_name_raw)
+
                     college_url = link_element.get_attribute("href")
 
                     if not college_name:
                         logger.warning(
-                            f"링크 요소에서 대학 이름을 찾을 수 없습니다 (인덱스: {idx}, 요소 HTML: {link_element.get_attribute('outerHTML')[:100]}). 건너뜁니다.")
+                            f"링크 요소에서 대학 이름을 찾을 수 없습니다 (인덱스: {idx}, 요소 HTML: {link_element.get_attribute('outerHTML')[:150]}). 건너뜁니다.")
                         continue
-                    if not college_url:  # URL이 없는 경우는 거의 없겠지만 방어 코드
+                    if not college_url:
                         logger.warning(f"링크 요소에서 URL을 찾을 수 없습니다 (이름: {college_name}). 건너뜁니다.")
                         continue
 
                     college_url = urljoin(root_url, college_url)
 
-                    # 대학 'code' 생성: URL의 마지막 유효한 경로 세그먼트 또는 이름 기반 슬러그
                     url_path_segments = [part for part in college_url.split('/') if
                                          part and part not in ('http:', 'https:', '')]
                     if url_path_segments:
-                        # 예: http://example.com/college/abc -> abc
-                        # 예: http://example.com/college/abc.html -> abc.html
-                        # 예: http://example.com/college/abc?id=123 -> abc
                         college_code_candidate = url_path_segments[-1].split('?')[0].split('#')[0]
-                    else:  # URL에서 코드 추출이 어려울 경우 이름 기반
+                    else:
                         college_code_candidate = college_name
 
-                    # 코드 정제: 소문자, 공백->'-', 특수문자 제거, 길이 제한
                     college_code = re.sub(r'\s+', '-', college_code_candidate.lower())
-                    college_code = re.sub(r'[^a-z0-9-_.]', '', college_code)[:50]  # 점(.)은 유지 (예: .html)
-                    if not college_code:  # 모든 문자가 제거된 경우 대비
+                    college_code = re.sub(r'[^a-z0-9-_.]', '', college_code)[:50]
+                    if not college_code:
                         college_code = f"college-{idx + 1}"
 
                     colleges_data.append({
@@ -126,6 +121,5 @@ async def discover_colleges(root_url: str) -> List[Dict]:
                 logger.info("DB에 변경된 대학 정보가 없습니다.")
     except Exception as e_db:
         logger.opt(exception=True).error(f"대학 정보 DB 저장 중 오류: {e_db}")
-        # sess.rollback() # 필요한 경우 롤백
 
     return colleges_data
