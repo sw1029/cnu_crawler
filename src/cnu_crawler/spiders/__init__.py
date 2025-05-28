@@ -8,5 +8,5 @@ __all__ = [
     "discover_all_colleges_entrypoint",
     #"crawl_departments",
     "crawl_department_notices",
-    "process_manual_links_file ",
+    "process_manual_links_file",
 ]
