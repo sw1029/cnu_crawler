@@ -10,6 +10,7 @@ import re, time
 from typing import Dict, List, Sequence, Tuple
 
 import pandas as pd
+import requests
 from bs4 import BeautifulSoup, Tag
 
 from ..utils import resilient_get, normalize_whitespace
@@ -36,6 +37,15 @@ _DATE_RE = re.compile(
 
 class GenericScraper(ScraperBase):
     def scrape(self) -> pd.DataFrame:  # type: ignore[override]
+        try:
+            resp = resilient_get(self.base_url, timeout=10)
+        except requests.HTTPError as e:
+            if e.response.status_code == 404 and "mode=list" not in self.base_url:
+                # 혹시 mode=list 빠졌다면 한 번 더 시도
+                fallback = self.base_url + ("?mode=list" if "?" not in self.base_url else "&mode=list")
+                resp = resilient_get(fallback, timeout=10)
+            else:
+                raise
         resp = resilient_get(self.base_url, timeout=10)
         base = resp.url.rsplit("/", 1)[0]  # 상대 URL 보정용
         soup = BeautifulSoup(resp.text, "html.parser")

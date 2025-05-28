@@ -5,3 +5,4 @@ tqdm>=4.66
 sentence-transformers>=2.4
 faiss-cpu>=1.7.4
 python-dateutil>=2.9
+faiss-cpu==1.8.0

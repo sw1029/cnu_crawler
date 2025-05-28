@@ -1,4 +1,4 @@
-from scraper.generic import GenericScraper
+from .scraper.generic import GenericScraper
 import importlib
 from typing import Dict, Type
 
