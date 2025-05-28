@@ -1,13 +1,7 @@
-aiohttp>=3.9
-aiodns>=3.1
-aiofiles>=23.2
 beautifulsoup4>=4.12
-lxml>=5.2
-selenium>=4.21      # 대학 메뉴 초기분석용
-aiohttp_retry>=2.8
-SQLAlchemy>=2.0
-alembic>=1.13
-pandas>=2.2         # CSV/Parquet
-apscheduler>=3.10
-python-dotenv>=1.0  # (옵션) 환경변수
-loguru
+requests>=2.31
+pandas>=2.2
+tqdm>=4.66
+sentence-transformers>=2.4
+faiss-cpu>=1.7.4
+python-dateutil>=2.9
