@@ -18,7 +18,8 @@ from cnu_crawler.storage.models import init_db, get_session, College, Department
 from cnu_crawler.spiders import (  #
     discover_all_colleges_entrypoint,  # 수정된 College 수집 함수
     crawl_departments,
-    crawl_department_notices
+    crawl_department_notices,
+    update_department_notice_urls_from_file
 )
 from cnu_crawler.storage.csv_sink import dump_daily_csv  #
 from cnu_crawler.core.fetcher import close_global_fetcher_client  #
