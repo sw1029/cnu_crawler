@@ -1,6 +1,6 @@
 """
 links.txt → ko-sroberta 임베딩 → FAISS 인덱스(link_index.faiss) + 메타(link_meta.pkl)
-실행:  python -m src.search.index_links
+실행:  python -m cnu_crawler.search.index_links
 """
 import os, csv, pickle, json
 from pathlib import Path
@@ -32,8 +32,10 @@ def load_links() -> List[Dict]:
             rows.append({"college": college, "dept": dept, "url": url.strip()})
     return rows
 
-# ── 메인 ───────────────────────────────────────────────────────
-def main():
+
+# ── 메인 로직 ─────────────────────────────────────────────────
+def update_index() -> str:
+    """links.txt를 임베딩하여 FAISS 인덱스를 갱신하고 상태 메시지를 반환."""
     links = load_links()
     model = SentenceTransformer(MODEL_NAME)
 
@@ -48,7 +50,12 @@ def main():
     META_FILE.write_bytes(pickle.dumps(pd.DataFrame(links)))
     INFO_FILE.write_text(json.dumps({"model": MODEL_NAME, "dim": int(emb.shape[1])}))
 
-    print(f"[+] indexed {len(links)} links ({emb.shape[1]}-d) → {INDEX_FILE.name}")
+    return f"[+] indexed {len(links)} links ({emb.shape[1]}-d) → {INDEX_FILE.name}"
+
+
+def main():
+    msg = update_index()
+    print(msg)
 
 if __name__ == "__main__":
     main()
