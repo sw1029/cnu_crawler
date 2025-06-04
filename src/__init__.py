@@ -1,3 +1,0 @@
-"""
-CNU Notice Crawler package
-"""
