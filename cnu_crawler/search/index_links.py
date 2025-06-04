@@ -1,6 +1,6 @@
 """
 links.txt → ko-sroberta 임베딩 → FAISS 인덱스(link_index.faiss) + 메타(link_meta.pkl)
-실행:  python -m src.search.index_links
+실행:  python -m cnu_crawler.search.index_links
 """
 import os, csv, pickle, json
 from pathlib import Path

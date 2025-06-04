@@ -1,7 +1,7 @@
 # ──────────────────────────────────────────────────────────────
-#  src/search/query_links.py
+#  cnu_crawler/search/query_links.py
 #  자연어 질의 → links.txt 인덱스(FAISS) → 최적 링크 → GenericScraper
-#  실행:  python -m src.search.query_links "화학과 공지 알려줘"
+#  실행:  python -m cnu_crawler.search.query_links "화학과 공지 알려줘"
 # ──────────────────────────────────────────────────────────────
 import os, sys, re, difflib, pickle
 from pathlib import Path
@@ -104,5 +104,5 @@ def main(query: str):
 # ── CLI ───────────────────────────────────────────────────────
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        sys.exit("Usage: python -m src.search.query_links \"<검색어>\"")
+        sys.exit("Usage: python -m cnu_crawler.search.query_links \"<검색어>\"")
     main(" ".join(sys.argv[1:]))
