@@ -77,7 +77,8 @@ def guess_list_url(url: str) -> str:
     return url + ("&" if "?" in url else "?") + "mode=list"
 
 # ── 메인 로직 ──────────────────────────────────────────────────
-def main(query: str):
+def search_links(query: str, show_rows: int = SHOW_ROWS) -> str:
+    """주어진 검색어로 공지 목록을 조회한 뒤 문자열로 반환."""
     index, meta = load_index()
     model = SentenceTransformer(MODEL_NAME)
 
@@ -88,11 +89,17 @@ def main(query: str):
     best = re_rank(candidates, query)
 
     list_url = guess_list_url(best.url)
-    print(f"[MATCH] {best.college}/{best.dept}  →  {list_url}")
 
     scraper = GenericScraper(best.college, best.dept, list_url)
-    df = scraper.scrape().head(SHOW_ROWS)[["title", "posted_at", "url"]]
-    print(df.to_string(index=False))
+    df = scraper.scrape().head(show_rows)[["title", "posted_at", "url"]]
+
+    header = f"[MATCH] {best.college}/{best.dept}  →  {list_url}"
+    return header + "\n" + df.to_string(index=False)
+
+
+def main(query: str):
+    msg = search_links(query)
+    print(msg)
 
 # ── CLI ───────────────────────────────────────────────────────
 if __name__ == "__main__":
